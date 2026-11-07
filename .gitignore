@@ -1,0 +1,17 @@
+*
+!.gitignore
+!README.md
+!docs/
+!docs/data.md
+!docs/usage.md
+!environment/
+!environment/requirements.txt
+!src/
+!src/diatomot/
+!src/diatomot/prepare_inputs.py
+!src/diatomot/eco_bounds.py
+!src/diatomot/run_ecology.py
+!src/diatomot/summarize_ecology.py
+!src/diatomot/precision.py
+!src/diatomot/concentration.py
+!src/diatomot/coverage.py
