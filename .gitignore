@@ -15,3 +15,12 @@
 !src/diatomot/precision.py
 !src/diatomot/concentration.py
 !src/diatomot/coverage.py
+!src/diatomot/verification_inputs.py
+!src/diatomot/verification_engine.py
+!src/diatomot/verification_replay.py
+!src/diatomot/verification_summary.py
+!src/diatomot/run_verification.py
+!src/diatomot/summarize_verification.py
+!src/diatomot/budget_ceiling.py
+!src/diatomot/run_budget_ceiling.py
+!src/diatomot/summarize_budget_ceiling.py

@@ -1,14 +1,16 @@
 # DiatomOT
 
-Analysis code for *Taxonomic concentration of diatom index uncertainty*.
+Analysis code for *Taxonomic verification priorities and budget limits in river diatom monitoring*.
 
 ## Research question
 
-How much trophic information remains when a diatom assemblage retains valve counts and genus identities but some finer taxon labels are unresolved? These scripts calculate the Trophic Diatom Index values compatible with that information and quantify how individual genera contribute to the remaining range.
+Incomplete diatom counts raise two monitoring questions: whether the retained taxonomic information already supports an assessment, and which additional identifications would be most useful. DiatomOT calculates compatible Trophic Diatom Index (TDI) ranges, locates their genus contributions, and evaluates targeted identification against finite-budget recovery ceilings.
 
-The analysis starts from Environment Agency river diatom counts and the DARLEQ3 coefficient dictionary. Recorded taxon labels are masked at specified fractions while their counts and correct genera are retained. Each unresolved count can take the lowest or highest coefficient assigned to its genus in the complete dictionary. Combining those limits with the identified counts gives lower and upper index endpoints. The scripts also calculate an unrestricted range, in which unresolved counts can take any coefficient from 1 to 5, and a point estimate based on identified counts.
+The first analysis starts from Environment Agency river diatom counts and the DARLEQ3 coefficient dictionary. Finer taxon labels are masked while counts and correct genera are retained. Each unresolved count can take the lowest or highest coefficient assigned to its genus in the complete dictionary. Combining those limits with the identified counts gives lower and upper index endpoints. The scripts also calculate an unrestricted range, in which unresolved counts can take any coefficient from 1 to 5, and a point estimate based on identified counts.
 
-This repository contains the numerical analysis code and instructions. Input datasets are obtained from their original providers. Numerical results, microscopy images and figure-generation code are excluded from this repository. All input, output and environment directories in the commands below are outside the repository.
+The verification analysis replays additional identification on the stored masked records. Boundary-aware verification (BAV) uses development-derived ecological score distributions to direct identification towards unresolved class boundaries. Four simple policies and a uniform-prior BAV implementation use the same stored masks and reveal queues. A retrospective calculation with advance knowledge of hidden scores determines the largest class recovery permitted by the specified queues, action rules and budgets.
+
+This repository contains numerical analysis code and instructions. Raw inputs come from their original providers; verification inputs and archived numerical results accompany the article as Online Resources 16 and 17. Input data, numerical results, microscopy images and figure-generation code remain outside this repository. All data, output and environment paths in the commands below are external to it.
 
 ## Repository structure
 
@@ -30,33 +32,44 @@ GitHub Repo/
       precision.py
       concentration.py
       coverage.py
+      verification_inputs.py
+      verification_engine.py
+      verification_replay.py
+      verification_summary.py
+      run_verification.py
+      summarize_verification.py
+      budget_ceiling.py
+      run_budget_ceiling.py
+      summarize_budget_ceiling.py
 ```
 
 ## Requirements and data
 
-Use Python 3.11 with NumPy 2.4.2, pandas 2.3.3 and pyreadr 0.5.9, as specified in [requirements.txt](environment/requirements.txt). pyreadr reads the coefficient dictionary directly; an R installation is not required.
+Use Python 3.11 and the versions in [requirements.txt](environment/requirements.txt): NumPy 2.4.2, pandas 2.3.3, pyreadr 0.5.9, Numba 0.64.0, llvmlite 0.46.0 and PyArrow 23.0.1. pyreadr reads the DARLEQ3 coefficient dictionary directly; an R installation is not required.
 
-Obtain `DIAT_OPEN_DATA_METRICS.csv`, `DIAT_OPEN_DATA_SITE.csv` and `DIAT_OPEN_DATA_TAXA.csv` from the Environment Agency [diatom archive](https://environment.data.gov.uk/ecology/explorer/downloads/DIAT_OPEN_DATA.zip), and `OPEN_DATA_TAXON_INFO.csv` from its [taxon archive](https://environment.data.gov.uk/ecology/explorer/downloads/OPEN_DATA_TAXON_INFO.zip). The fifth input is [darleq3_data.rda](https://raw.githubusercontent.com/nsj3/darleq3/e750ae0511b96b815aacb836d839f979bce980eb/data/darleq3_data.rda) from the specified DARLEQ3 commit.
+For the archive analyses, obtain `DIAT_OPEN_DATA_METRICS.csv`, `DIAT_OPEN_DATA_SITE.csv` and `DIAT_OPEN_DATA_TAXA.csv` from the Environment Agency [diatom archive](https://environment.data.gov.uk/ecology/explorer/downloads/DIAT_OPEN_DATA.zip), and `OPEN_DATA_TAXON_INFO.csv` from its [taxon archive](https://environment.data.gov.uk/ecology/explorer/downloads/OPEN_DATA_TAXON_INFO.zip). The fifth input is [darleq3_data.rda](https://raw.githubusercontent.com/nsj3/darleq3/e750ae0511b96b815aacb836d839f979bce980eb/data/darleq3_data.rda) from the specified DARLEQ3 commit. Place these five files in `../diatomot-work/raw/`.
 
-Place these five files in `../diatomot-work/raw/`. The [data-source notes](docs/data.md) identify the study snapshot, original archive checksums and upstream licence terms. Taxon matching uses the original BIOSYS identifiers and DARLEQ3 NBS codes. Preserve the source filenames and columns.
+For verification, place **Online Resource 16 — Complete targeted verification results** and **Online Resource 17 — Verification budget ceilings** in `../diatomot-work/resources/`. The examples call these archives `OR16.zip` and `OR17.zip`; substitute their actual filenames if different. OR16 includes the population tables, original masks, development score counts, terminal outcomes and reveal queues. OR17 contains the archived ceiling states and their summaries. The verification calculations can use these companion resources independently of the raw-archive preparation commands.
+
+The [data-source notes](docs/data.md) describe the source snapshot, attribution, required members and how the two input routes relate. Preserve source filenames, identifiers and columns.
 
 ## Installation
 
-Run all commands from the repository root. Create an environment outside the repository:
+Run commands from the repository root. Create an environment outside the repository:
 
 ```text
 python -m venv ../diatomot-env
 ```
 
-Activate it with `../diatomot-env/Scripts/Activate.ps1` in PowerShell, or `source ../diatomot-env/bin/activate` in a POSIX shell. Install the dependencies:
+Activate it with `../diatomot-env/Scripts/Activate.ps1` in PowerShell, or `source ../diatomot-env/bin/activate` in a POSIX shell, then install the dependencies:
 
 ```text
 python -m pip install -r environment/requirements.txt
 ```
 
-## Analysis commands
+## Archive analyses
 
-Prepare the inputs, calculate the masking experiments, and derive the statistical summaries in this order:
+Prepare the inputs, calculate the masking experiments and derive the statistical summaries in this order:
 
 ```text
 python -B src/diatomot/prepare_inputs.py --data-dir ../diatomot-work/raw --coefficients ../diatomot-work/raw/darleq3_data.rda --output ../diatomot-work/inputs
@@ -67,26 +80,48 @@ python -B src/diatomot/concentration.py --experiments ../diatomot-work/experimen
 python -B src/diatomot/coverage.py --inputs ../diatomot-work/inputs --output ../diatomot-work/coverage
 ```
 
-Each output directory must be absent or empty. For experiments and summaries, this requirement applies to each partition subdirectory. The `-B` option keeps Python bytecode caches out of the repository. Both partitions are needed for the precision and concentration analyses. Coverage requires only the prepared inputs. See the [usage reference](docs/usage.md) for arguments and output files.
+Both partitions are needed for precision and concentration. Coverage requires only the prepared inputs. Each destination must be absent or empty; for partitioned analyses this applies to the requested partition subdirectory. The `-B` option keeps Python bytecode caches out of the repository.
+
+## Verification and budget ceilings
+
+The archived terminal outcomes can be summarized directly. Aggregate development first, then confirmation using the comparator selected in development:
+
+```text
+python -B src/diatomot/summarize_verification.py --resource ../diatomot-work/resources/OR16.zip --partition development --out ../diatomot-work/verification-statistics
+python -B src/diatomot/summarize_verification.py --resource ../diatomot-work/resources/OR16.zip --partition confirmation --out ../diatomot-work/verification-statistics
+python -B src/diatomot/summarize_budget_ceiling.py --resource ../diatomot-work/resources/OR16.zip --ceiling ../diatomot-work/resources/OR17.zip --out ../diatomot-work/ceiling-statistics
+```
+
+To calculate the verification trajectories and exact ceilings themselves, use:
+
+```text
+python -B src/diatomot/run_verification.py --resource ../diatomot-work/resources/OR16.zip --partition development --out ../diatomot-work/verification --workers 4
+python -B src/diatomot/run_verification.py --resource ../diatomot-work/resources/OR16.zip --partition confirmation --out ../diatomot-work/verification --workers 4
+python -B src/diatomot/run_budget_ceiling.py --resource ../diatomot-work/resources/OR16.zip --out ../diatomot-work/ceilings --workers 4
+```
+
+The full ceiling calculation searches 133,150 record-mask-queue states and can be computationally intensive. `--record-ids` restricts either calculation to selected monitoring records. Full-population summaries require all records, masks and reveal replicates. The [usage reference](docs/usage.md) gives the subset commands and commands for summarizing newly calculated outputs.
 
 ## Analysis components
 
-| Module | Role |
+| Modules | Role |
 | --- | --- |
-| `prepare_inputs.py` | Match taxon identifiers, establish sample eligibility and prepare count and coefficient tables |
-| `eco_bounds.py` | Assign catchment partitions, construct masks and calculate feasible index endpoints |
-| `run_ecology.py` | Apply random and selective masking under both coefficient definitions |
-| `summarize_ecology.py` | Aggregate errors, interval widths, threshold attainment and derived sample classes |
-| `precision.py` | Calculate weighted width quantiles and threshold probabilities |
-| `concentration.py` | Summarize genus contributions, abundance shares and catchment-omission estimates |
-| `coverage.py` | Describe records by scoring completeness, year, site, catchment and partition |
+| `prepare_inputs.py`, `eco_bounds.py` | Match taxon identifiers, define eligible records, assign catchment partitions, construct masks and calculate index endpoints |
+| `run_ecology.py`, `summarize_ecology.py` | Calculate random and selective masking results, population estimates and bootstrap intervals |
+| `precision.py`, `concentration.py`, `coverage.py` | Summarize precision thresholds, genus contributions and monitoring-record coverage |
+| `verification_inputs.py` | Read the companion input tables and reconstruct original masked records |
+| `verification_engine.py`, `verification_replay.py` | Apply identification policies using shared reveal queues and deterministic candidate draws |
+| `run_verification.py`, `verification_summary.py`, `summarize_verification.py` | Calculate trajectories, select the development comparator and summarize paired recovery and effort |
+| `budget_ceiling.py`, `run_budget_ceiling.py`, `summarize_budget_ceiling.py` | Find exact queue-prefix costs and summarize conditional budget ceilings |
 
 ## Calculation conventions
 
-The primary coefficient definition is `TDI5LM.orig`; `TDI5LM` supplies the alternative. The primary population contains records in which every counted valve has a coefficient. Additional summaries use all eligible scored subcommunities and the fully scored subset with at most 1,000 recorded valves. Catchment allocation uses a fixed hash, keeping observations from the same catchment together.
+The primary coefficient definition is `TDI5LM.orig`; `TDI5LM` supplies the alternative. The primary archive population contains records in which every counted valve has a coefficient. Additional summaries use eligible scored subcommunities and the fully scored subset with at most 1,000 recorded valves. Catchment allocation uses a fixed hash, keeping observations from the same catchment together.
 
-Masking fractions are 5%, 10%, 20%, 30% and 50%. Random loss samples valves without replacement, using five replicates with seeds 1701 through 1705. Selective loss removes the lowest-scoring, highest-scoring or least-abundant taxa first. Each selective condition uses one mask. Requested fractions are converted to integer valve counts before scoring.
+Archive masking fractions are 5%, 10%, 20%, 30% and 50%. Random loss samples valves without replacement, using five replicates with seeds 1701 through 1705. Selective loss removes the lowest-scoring, highest-scoring or least-abundant taxa first. Requested fractions become integer valve counts through nearest-integer rounding with half-up ties. Archive summaries average masks within records, records within sites and sites within catchments, giving catchments equal weight. Their intervals use 5,000 catchment bootstrap resamples with seed 20261106. Width quantiles use the inverse weighted empirical distribution; attainment thresholds are 5, 10, 15 and 20 TDI points with tolerance 1e-9.
 
-Statistical summaries average masks within records, records within sites and sites within catchments, then give catchments equal weight. Confidence intervals use 5,000 catchment bootstrap resamples with seed 20261106. Paired quantities retain the same catchment draws. Width quantiles use the inverse weighted empirical distribution; attainment probabilities use thresholds of 5, 10, 15 and 20 index points with a numerical tolerance of 1e-9.
+Verification uses the original 20% random masks, five matched reveal replicates and budgets of 10%, 25% and 50% of hidden valves. The six policies are B0, B1, B2, B3, BAV and BAV_uniform. BAV evaluates 64 hypothetical batches per candidate genus. The development prior adds one count to each permitted score. The within-genus reveal queue is common to all policies and budgets. Score sums use integer tenths; EQR is capped at one, and equality at a class boundary belongs to the higher class. Identification stops as soon as the full compatible range supports one class, including a check after every valve within a batch.
 
-Concentration summaries include the combined contributions of *Navicula*, *Gomphonema* and *Nitzschia*. Overall shares divide summed catchment contributions by summed catchment totals. Masked-abundance shares use masked scoring counts as the denominator. Coverage descriptions give records equal weight. Derived sample classes use the specified TDI calibration and site alkalinity from 5 to 250 mg/L as CaCO3. The manuscript and Supplementary Information provide the scientific interpretation and full definitions.
+Verification and ceiling summaries use 5,000 catchment bootstrap resamples with seed 20261111 and preserve the paired draws. Conditional recovery divides weighted recovered-and-initially-ambiguous mass by the original weighted initial-ambiguity mass. The simple comparator is selected among B0–B3 by development recovery at the 25% budget; ties favour lower actual effort, then B3, B2, B1 and B0.
+
+The exact retrospective ceilings condition on known hidden scores and fixed within-genus queues. One permits the same five-valve selections as BAV, with shorter terminal selections; the other permits switching genus after each valve. Both search up to the rounded 50% budget. A stored minimum cost of `-1` identifies states without a resolving allocation within that cap. The manuscript and Supplementary Information give the full scientific definitions and interpretation.
